@@ -1,3 +1,3 @@
-module gitlab.com/tuxer/go-plugin
+module github.com/eqto/steker
 
 go 1.14
