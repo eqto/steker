@@ -4,6 +4,7 @@ package service
 type Request interface {
 	Put(data ...interface{})
 	Name() string
+	Get(idx int) interface{}
 
 	bytes() []byte
 }
@@ -22,4 +23,11 @@ func (r *request) Put(data ...interface{}) {
 
 func (r *request) Name() string {
 	return r.name
+}
+
+func (r *request) Get(idx int) interface{} {
+	if idx > len(r.data) {
+		return nil
+	}
+	return r.data[idx]
 }
