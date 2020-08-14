@@ -16,7 +16,7 @@ type Request interface {
 
 type request struct {
 	Request
-	plugin *Plugin
+	plugin *plug
 	id     uint16
 	name   string
 

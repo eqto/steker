@@ -13,14 +13,12 @@ import (
 )
 
 var (
-	pluginMap  = make(map[int]*Plugin)
-	pluginLock = sync.Mutex{}
-)
-
-var (
 	logD = log.Println
 	logW = log.Println
 	logE = log.Println
+
+	lock      = sync.Mutex{}
+	pluginMap = make(map[int]Plugin)
 )
 
 //Value ...
@@ -34,7 +32,10 @@ func SetLogger(d func(debug ...interface{}), w func(warn ...interface{}), e func
 }
 
 //Plugin ...
-type Plugin struct {
+type Plugin interface {
+}
+
+type plug struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
@@ -49,7 +50,7 @@ type Plugin struct {
 }
 
 //Request ...
-func (p *Plugin) Request(name string) Request {
+func (p *plug) Request(name string) Request {
 	if len(name) > math.MaxUint16 {
 		name = name[:math.MaxUint16]
 	}
@@ -57,11 +58,11 @@ func (p *Plugin) Request(name string) Request {
 }
 
 //Stop ...
-func (p *Plugin) Stop() error {
+func (p *plug) Stop() error {
 	return p.cmd.Process.Signal(syscall.SIGINT)
 }
 
-func (p *Plugin) id() uint16 {
+func (p *plug) id() uint16 {
 	p.counterLock.Lock()
 	defer p.counterLock.Unlock()
 	if p.counter == math.MaxInt16 {
@@ -71,7 +72,7 @@ func (p *Plugin) id() uint16 {
 	return p.counter
 }
 
-func (p *Plugin) sendRequest(req *request) (<-chan Response, error) {
+func (p *plug) sendRequest(req *request) (<-chan Response, error) {
 	b := buff.Writer{}
 	id := p.id()
 	b.PutUint16(int(id))
@@ -98,13 +99,13 @@ func (p *Plugin) sendRequest(req *request) (<-chan Response, error) {
 	return respCh, nil
 }
 
-func (p *Plugin) write(data []byte) (int, error) {
+func (p *plug) write(data []byte) (int, error) {
 	p.lockWriter.Lock()
 	defer p.lockWriter.Unlock()
 	return p.stdin.Write(data)
 }
 
-func (p *Plugin) read() {
+func (p *plug) read() {
 	defer p.Stop()
 	bufout := buff.NewReader(p.stdout)
 	for {
@@ -207,10 +208,10 @@ func (p *Plugin) read() {
 	}
 }
 
-//Get ...
-func Get(id int, path string) (*Plugin, error) {
-	pluginLock.Lock()
-	defer pluginLock.Unlock()
+//LoadPlugin ...
+func LoadPlugin(id int, path string) (Plugin, error) {
+	lock.Lock()
+	defer lock.Unlock()
 	if plugin, ok := pluginMap[id]; ok {
 		return plugin, nil
 	}
@@ -227,8 +228,10 @@ func Get(id int, path string) (*Plugin, error) {
 	if e := cmd.Start(); e != nil {
 		return nil, e
 	}
-	plugin := &Plugin{cmd: cmd, stdin: stdin, stdout: stdout, exitCh: make(chan bool)}
-	go plugin.read()
-	pluginMap[id] = plugin
-	return plugin, nil
+	plug := &plug{cmd: cmd, stdin: stdin, stdout: stdout, exitCh: make(chan bool)}
+	defer func() {
+		go plug.read()
+	}()
+	pluginMap[id] = plug
+	return plug, nil
 }
