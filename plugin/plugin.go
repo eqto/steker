@@ -33,6 +33,8 @@ func SetLogger(d func(debug ...interface{}), w func(warn ...interface{}), e func
 
 //Plugin ...
 type Plugin interface {
+	Stop() error
+	Request(name string) Request
 }
 
 type plug struct {
