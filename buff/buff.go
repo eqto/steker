@@ -3,12 +3,13 @@ package buff
 import "encoding/binary"
 
 const (
-	DataErr = iota
-	DataByte
+	DataSuccess = iota
+	DataErr
 	DataInt
 	DataFloat
 	DataBytes
 	DataString
+	DataStringMap
 )
 
 //uint16len use 2 bytes

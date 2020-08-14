@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"io"
 	"log"
 	"math"
@@ -12,7 +13,7 @@ import (
 )
 
 var (
-	pluginMap  = make(map[string]*Plugin)
+	pluginMap  = make(map[int]*Plugin)
 	pluginLock = sync.Mutex{}
 )
 
@@ -21,6 +22,9 @@ var (
 	logW = log.Println
 	logE = log.Println
 )
+
+//Value ...
+type Value buff.Value
 
 //SetLogger ...
 func SetLogger(d func(debug ...interface{}), w func(warn ...interface{}), e func(err ...interface{})) {
@@ -41,6 +45,7 @@ type Plugin struct {
 
 	counterLock sync.Mutex
 	counter     uint16
+	exitCh      chan bool
 }
 
 //Request ...
@@ -66,25 +71,26 @@ func (p *Plugin) id() uint16 {
 	return p.counter
 }
 
-func (p *Plugin) sendRequest(r Request) (<-chan Response, error) {
+func (p *Plugin) sendRequest(req *request) (<-chan Response, error) {
 	b := buff.Writer{}
 	id := p.id()
 	b.PutUint16(int(id))
-	b.Put(r.bytes())
-
-	logD(b.Bytes())
+	m, e := req.bytes()
+	if e != nil {
+		return nil, e
+	}
+	b.Put(m)
 
 	pack := buff.Writer{}
 	pack.PutBytes(b.Bytes())
 
-	logD(pack.Bytes())
 	if p.respMap == nil {
 		p.respMap = make(map[uint16]chan Response)
 	}
 	respCh := make(chan Response, 1)
 	p.respMap[id] = respCh
 
-	_, e := p.write(pack.Bytes())
+	_, e = p.write(pack.Bytes())
 	if e != nil {
 		delete(p.respMap, id)
 		return nil, e
@@ -98,11 +104,114 @@ func (p *Plugin) write(data []byte) (int, error) {
 	return p.stdin.Write(data)
 }
 
+func (p *Plugin) read() {
+	defer p.Stop()
+	bufout := buff.NewReader(p.stdout)
+	for {
+		pack, e := bufout.GetBytes()
+		if e != nil {
+			break
+		}
+		buf := buff.NewByteReader(pack)
+		id, e := buf.GetUint16()
+		if e != nil {
+			logD(`drop message, unable to get id`, e)
+			continue
+		}
+		resp := &response{}
+		resp.Init()
+		resp.SetID(id)
+
+		if ch, ok := p.respMap[id]; ok {
+			status, e := buf.GetByte() //DataSuccess / DataErr
+			if e != nil {
+				logD(`drop message, unable to get status`, e)
+				continue
+			}
+			switch status {
+			case buff.DataSuccess:
+				l, e := buf.GetUint16()
+				if e != nil {
+					logD(`drop message, unable to get length fields`, e)
+					continue
+				}
+				length := int(l)
+				for i := 0; i < length; i++ {
+					typ, e := buf.GetByte()
+					if e != nil {
+						logD(`drop message, unable to get field type`, e)
+						continue
+					}
+					var val interface{} = nil
+					switch typ {
+					case buff.DataStringMap:
+						key, e := buf.GetShortString()
+						if e != nil {
+							logD(`drop message, unable to get map key`, e)
+							continue
+						}
+						val, e := buf.GetData()
+						if e != nil {
+							logD(`drop message, unable to get byte val of map`, e)
+							continue
+						}
+						resp.PutValue(key, val)
+					case buff.DataBytes:
+						v, e := buf.GetBytes()
+						if e != nil {
+							logD(`drop message, unable to get field bytes`, e)
+							continue
+						}
+						val = v
+					case buff.DataString:
+						v, e := buf.GetString()
+						if e != nil {
+							logD(`drop message, unable to get field string`, e)
+							continue
+						}
+						val = v
+					case buff.DataInt:
+						v, e := buf.GetInt()
+						if e != nil {
+							logD(`drop message, unable to get field int`, e)
+							continue
+						}
+						val = v
+					case buff.DataFloat:
+						v, e := buf.GetFloat()
+						if e != nil {
+							logD(`drop message, unable to get field float`, e)
+							continue
+						}
+						val = v
+					}
+					if val != nil {
+						resp.Put(buff.NewValue(val))
+					}
+				}
+
+			case buff.DataErr:
+				str, e := buf.GetString()
+				if e != nil {
+					logD(`drop message, unable to get error string`, e)
+					continue
+				}
+				resp.SetErr(errors.New(str))
+			default:
+				logD(`drop message, unable to identify message`)
+				continue
+			}
+			logD(resp.String())
+			ch <- resp
+		}
+	}
+}
+
 //Get ...
-func Get(path string) (*Plugin, error) {
+func Get(id int, path string) (*Plugin, error) {
 	pluginLock.Lock()
 	defer pluginLock.Unlock()
-	if plugin, ok := pluginMap[path]; ok {
+	if plugin, ok := pluginMap[id]; ok {
 		return plugin, nil
 	}
 	cmd := exec.Command(path)
@@ -114,10 +223,12 @@ func Get(path string) (*Plugin, error) {
 	if e != nil {
 		return nil, e
 	}
+
 	if e := cmd.Start(); e != nil {
 		return nil, e
 	}
-	plugin := &Plugin{cmd: cmd, stdin: stdin, stdout: stdout}
-	pluginMap[path] = plugin
+	plugin := &Plugin{cmd: cmd, stdin: stdin, stdout: stdout, exitCh: make(chan bool)}
+	go plugin.read()
+	pluginMap[id] = plugin
 	return plugin, nil
 }

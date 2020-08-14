@@ -3,6 +3,7 @@ package buff
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 )
@@ -23,7 +24,7 @@ func (r *Reader) GetByte() (byte, error) {
 
 //Get ...
 func (r *Reader) Get(b []byte) (int, error) {
-	return r.r.Read(b)
+	return io.ReadFull(r.r, b)
 }
 
 //GetLength ...
@@ -54,6 +55,25 @@ func (r *Reader) GetFloat() (float64, error) {
 	return math.Float64frombits(binary.BigEndian.Uint64(data)), nil
 }
 
+//GetData ...
+func (r *Reader) GetData() (interface{}, error) {
+	typ, e := r.GetByte()
+	if e != nil {
+		return nil, e
+	}
+	switch typ {
+	case DataBytes:
+		return r.GetBytes()
+	case DataString:
+		return r.GetString()
+	case DataInt:
+		return r.GetInt()
+	case DataFloat:
+		return r.GetFloat()
+	}
+	return nil, fmt.Errorf(`not recognize data type %d`, typ)
+}
+
 //GetShortString ...
 func (r *Reader) GetShortString() (string, error) {
 	length, e := r.GetByte()
@@ -61,7 +81,7 @@ func (r *Reader) GetShortString() (string, error) {
 		return ``, e
 	}
 	data := make([]byte, length)
-	_, e = r.r.Read(data)
+	_, e = r.Get(data)
 	if e != nil {
 		return ``, e
 	}
@@ -104,7 +124,7 @@ func (r *Reader) GetBytes() ([]byte, error) {
 		length += int(l2)
 	}
 	data := make([]byte, length)
-	_, e = r.r.Read(data)
+	_, e = r.Get(data)
 	if e != nil {
 		return nil, e
 	}
@@ -114,7 +134,7 @@ func (r *Reader) GetBytes() ([]byte, error) {
 //GetUint16 ...
 func (r *Reader) GetUint16() (uint16, error) {
 	data := make([]byte, 2)
-	_, e := r.r.Read(data)
+	_, e := r.Get(data)
 	if e != nil {
 		return 0, e
 	}

@@ -1,26 +1,18 @@
 package plugin
 
+import "github.com/eqto/steker/buff"
+
 //Response ...
-type Response struct {
-	resp []interface{}
+type Response interface {
+	Get(idx int) Value
+	Error() error
 }
 
-//PutString ...
-func (r *Response) PutString(s string) {
-	r.resp = append(r.resp, s)
+type response struct {
+	buff.Response
 }
 
-//PutInt ...
-func (r *Response) PutInt(i int) {
-	r.resp = append(r.resp, i)
-}
-
-//PutFloat ...
-func (r *Response) PutFloat(f float64) {
-	r.resp = append(r.resp, f)
-}
-
-//PutBytes ...
-func (r *Response) PutBytes(b []byte) {
-	r.resp = append(r.resp, b)
+func (r *response) Get(idx int) Value {
+	v := r.Response.Get(idx)
+	return v
 }
