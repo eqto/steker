@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/eqto/go-service"
 	"github.com/eqto/steker/buff"
-	"gitlab.com/tuxer/go-service"
 )
 
 var (
