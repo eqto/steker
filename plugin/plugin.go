@@ -16,9 +16,6 @@ var (
 	logD = log.Println
 	logW = log.Println
 	logE = log.Println
-
-	lock      = sync.Mutex{}
-	pluginMap = make(map[int]Plugin)
 )
 
 //Value ...
@@ -211,12 +208,7 @@ func (p *plug) read() {
 }
 
 //LoadPlugin ...
-func LoadPlugin(id int, path string) (Plugin, error) {
-	lock.Lock()
-	defer lock.Unlock()
-	if plugin, ok := pluginMap[id]; ok {
-		return plugin, nil
-	}
+func LoadPlugin(path string) (Plugin, error) {
 	cmd := exec.Command(path)
 	stdin, e := cmd.StdinPipe()
 	if e != nil {
@@ -231,9 +223,6 @@ func LoadPlugin(id int, path string) (Plugin, error) {
 		return nil, e
 	}
 	plug := &plug{cmd: cmd, stdin: stdin, stdout: stdout, exitCh: make(chan bool)}
-	defer func() {
-		go plug.read()
-	}()
-	pluginMap[id] = plug
+	go plug.read()
 	return plug, nil
 }
