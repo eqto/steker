@@ -44,7 +44,7 @@ func AddFunc(f func(ctx Context) error) error {
 	if funcMap == nil {
 		funcMap = make(map[string]func(ctx Context) error)
 	}
-	logD(fmt.Sprintf(`Add function: %s()`, name))
+	logD(fmt.Sprintf(`Register function: %s()`, name))
 	funcMap[name] = f
 	return nil
 }
@@ -112,6 +112,7 @@ func processRequest(ctx *context, data []byte) {
 		panic(e)
 	}
 	if req.name != `` {
+		logD(`Request name:`, req.name)
 		if f, ok := funcMap[req.name]; ok {
 			ctx.req = req
 			ctx.resp = resp
