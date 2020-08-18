@@ -53,6 +53,11 @@ func (r *Response) Bytes() []byte {
 		buf.PutString(r.err.Error())
 		return buf.Bytes()
 	}
+	if r.err != nil {
+		buf.PutByte(DataErr)
+		buf.PutString(r.err.Error())
+		return buf.Bytes()
+	}
 	buf.PutByte(DataSuccess)
 	length := len(r.data) + len(r.dataMap)
 	buf.PutUint16(length)
@@ -79,6 +84,9 @@ func (r *Response) String() string {
 	}
 	for key, val := range r.data {
 		buf.WriteString(fmt.Sprintf("  - [%d] %s\n", key, val.String()))
+	}
+	if r.err != nil {
+		buf.WriteString(`Err: ` + r.err.Error())
 	}
 
 	return buf.String()
