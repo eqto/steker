@@ -93,26 +93,31 @@ func Serve() error {
 }
 
 func processRequest(ctx *context, data []byte) {
+	resp := buff.NewResponse()
 	defer func() {
 		if r := recover(); r != nil {
+			switch r := r.(type) {
+			case error:
+				resp.SetErr(r)
+			case string:
+				resp.SetErr(errors.New(r))
+			}
 			logE(r)
 		}
+		writePack(resp.Bytes())
 	}()
 	req, e := translateRequest(data)
-	logD(req.String())
+	resp.SetID(req.id)
 	if e != nil {
 		panic(e)
 	}
 	if req.name != `` {
 		if f, ok := funcMap[req.name]; ok {
-			resp := buff.NewResponse()
-			resp.SetID(req.id)
 			ctx.req = req
 			ctx.resp = resp
 			if e := f(ctx); e != nil {
 				resp.SetErr(e)
 			}
-			writePack(resp.Bytes())
 		} else {
 			panic(fmt.Sprintf(`func %s not found`, req.name))
 		}
