@@ -112,7 +112,6 @@ func (p *plug) read() {
 		if e != nil {
 			break
 		}
-		logD(pack)
 		buf := buff.NewByteReader(pack)
 		id, e := buf.GetUint16()
 		if e != nil {
@@ -129,7 +128,6 @@ func (p *plug) read() {
 				logD(`drop message, unable to get status`, e)
 				continue
 			}
-			logD(`receive:`, status)
 			switch status {
 			case buff.DataSuccess:
 				l, e := buf.GetUint16()
@@ -203,7 +201,6 @@ func (p *plug) read() {
 				logD(`drop message, unable to identify message`)
 				continue
 			}
-			logD(resp.String())
 			ch <- resp
 		}
 	}
